@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>P12 表格结构审计与重构方案</title>
+<style>
+:root{--ink:#172033;--muted:#5d687a;--line:#dde4ee;--bg:#f4f7fb;--card:#fff;--navy:#002060;--blue:#155eef;--red:#b42318;--orange:#b54708;--green:#067647;--gold:#b8860b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.7 "Microsoft YaHei",Arial,sans-serif}
+main{max-width:1560px;margin:0 auto;padding:32px 40px 80px}
+.hero{background:linear-gradient(135deg,#002060,#155eef);color:#fff;border-radius:16px;padding:30px 36px;margin-bottom:22px}
+.hero h1{margin:0 0 6px;font-size:27px}
+.hero p{margin:3px 0;color:#e3edff;font-size:13px}
+h2{color:var(--navy);border-left:5px solid var(--blue);padding-left:11px;margin:34px 0 12px;font-size:20px}
+h3{color:var(--navy);margin:22px 0 6px;font-size:16px}
+h4{margin:14px 0 4px;font-size:14px;color:#33415c}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:12px 0;box-shadow:0 2px 8px rgba(16,24,40,.04)}
+.callout{border-left:5px solid var(--red);background:#fff5f4}
+.warn{border-left:5px solid var(--orange);background:#fff8ec}
+.good{border-left:5px solid var(--green);background:#effaf5}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin:14px 0}
+.metric{background:#f7f9fd;border:1px solid var(--line);padding:12px 14px;border-radius:10px}
+.metric b{display:block;font-size:21px;color:var(--blue)}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);font-size:13px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+th{background:#eaf1ff;color:var(--navy)}
+td.num{text-align:center;font-variant-numeric:tabular-nums}
+tr:nth-child(even) td{background:#fbfcfe}
+.sev{font-weight:700;white-space:nowrap}
+.s0{color:#b42318}.s1{color:#b54708}.s2{color:#175cd3}.s3{color:#067647}
+code{background:#eef1f5;border-radius:4px;padding:1px 5px;font-family:Consolas,Menlo,monospace;font-size:12.5px}
+ul{margin:5px 0}li{margin:3px 0}
+.small{color:var(--muted);font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.box{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fcfdff}
+.box h4{margin-top:0}
+pre{background:#0b1f45;color:#dce7ff;padding:12px 14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.55}
+.footer{margin-top:34px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:12px}
+.dim{color:var(--muted)}
+.ok::before{content:"✔ ";color:#067647;font-weight:700}
+.no::before{content:"✖ ";color:#b42318;font-weight:700}
+.mid::before{content:"▲ ";color:#b54708;font-weight:700}
+@media(max-width:1100px){main{padding:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+
+<section class="hero">
+<h1>第十二页（P12）表格全量结构审计与重构方案</h1>
+<p>对象：<code>D:\sucheng\29 第四版.pdf</code> 第 12 页｜还原方式：PyMuPDF 坐标级单元格/矢量矩形/字体/图像位图提取</p>
+<p>页面上共有 <b>2 张主表</b>、<b>4 张 KPI 卡</b>、<b>1 张客户卡</b>、<b>6 张图片</b>、<b>1 条脚注</b>、<b>1 条页级口号</b>。</p>
+</section>
+
+<div class="grid">
+<div class="metric"><b>2</b>张对标表（材料表 + 装备表）</div>
+<div class="metric"><b>7</b>个指标行</div>
+<div class="metric"><b>1</b>处表头/表体列宽错位</div>
+<div class="metric"><b>4</b>处数据类型不匹配</div>
+</div>
+
+<h2>一、页面现状精确还原</h2>
+
+<h3>1.1 页面分区（页面尺寸 960 × 540 pt）</h3>
+<table>
+<thead><tr><th style="width:14%">区域</th><th style="width:20%">坐标范围</th><th style="width:16%">尺寸</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>页眉</td><td>y 3.8–45.8 / x 53–191</td><td>—</td><td>栏目名「项目优势」</td></tr>
+<tr><td>页级口号</td><td>y 25.0–51.7 / x 266.8–761.0</td><td>494 × 26.7</td><td>「核心技术指标全面超越国内外公开同类产品」（图片化艺术字，26pt）</td></tr>
+<tr><td>左区 · 表一</td><td>y 109.5–283.3 / x 13.5–713.0</td><td>699.5 × 173.8</td><td>材料对比表（2 表头行 + 3 数据行）</td></tr>
+<tr><td>左区 · 表二</td><td>y 330.1–505.5 / x 13.5–713.0</td><td>699.5 × 175.4</td><td>装备对比表（2 表头行 + 4 数据行）</td></tr>
+<tr><td>左区 · 脚注</td><td>y 508.0–531.2 / x 15.4–306.8</td><td>—</td><td>「比较口径与来源：国内外厂商公开资料及实测」14pt</td></tr>
+<tr><td>右区 · 客户卡</td><td>y 57.5–158.2 / x 721.4–957.2</td><td>—</td><td>上海149厂完成中试 / 隶属航天科技集团八院 / 主营火箭、卫星总装制造</td></tr>
+<tr><td>右区 · 图片组</td><td>y 165.0–402.7 / x 720.1–944.8</td><td>—</td><td>6 张位图堆叠（两组 2×2 近似网格），<b>全部无图签</b></td></tr>
+<tr><td>右区 · KPI 卡</td><td>y 398.7–522.3 / x 720.0–964.2</td><td>2×2 网格</td><td>降低57%｜降低48%｜升至96%｜提升45%</td></tr>
+</tbody>
+</table>
+
+<h3>1.2 表一（上）单元格结构还原</h3>
+<p class="small">标题：<code>塑成非凡自研PEEK基复合材料与国内外同类型润滑材料对比</code>（x 263.6–638.0，20pt，图片化字）</p>
+<table>
+<thead><tr><th style="width:17%">行</th><th style="width:11%">行高</th><th style="width:16%">行首单元格</th><th style="width:18%">列 A</th><th style="width:18%">列 B</th><th>列 C（我方）</th></tr></thead>
+<tbody>
+<tr><td>表头行 1（厂商）</td><td>34.7</td><td rowspan="2" style="background:#eef3ff">厂商及系统配置<br><span class="small">x 13.5–210.6｜24pt</span></td><td>英国威格斯<br><span class="small">x 210.6–327.7｜16pt</span></td><td>江苏君华<br><span class="small">x 327.7–439.4｜16pt</span></td><td><b>塑成非凡</b><br><span class="small">x 439.5–<b style="color:#b42318">713.0</b>｜18pt</span></td></tr>
+<tr><td>表头行 2（牌号）</td><td>35.0</td><td>PEEK 450FC30<br><span class="small">12pt</span></td><td>PEEK 5600CF30<br><span class="small">12pt</span></td><td>CM-PEEK SL12<br><span class="small">16pt｜x 439.5–<b>605.8</b></span></td></tr>
+<tr><td>数据行 1</td><td>34.7</td><td>干摩擦系数</td><td class="num">0.18～0.22 <span class="small">14pt</span></td><td class="num">0.28～0.35 <span class="small">14pt</span></td><td class="num">0.05～0.11 <span class="small">16pt</span></td></tr>
+<tr><td>数据行 2</td><td>34.7</td><td>宽温域适应性</td><td class="num">仅室温稳定 <span class="small">14pt</span></td><td class="num">仅室温稳定 <span class="small">14pt</span></td><td class="num">-150℃~150℃稳定 <span class="small">16pt</span></td></tr>
+<tr><td>数据行 3</td><td>34.7</td><td>适用预热方式</td><td class="num">单区整体预热 <span class="small">14pt</span></td><td class="num">八区静态分区 <span class="small">14pt</span></td><td class="num">多区动态解耦 <span class="small">16pt</span></td></tr>
+</tbody>
+</table>
+
+<h3>1.3 表二（下）单元格结构还原</h3>
+<p class="small">标题：<code>塑成非凡自研高温LPBF成形装备与国内外同类型装备对比</code>（x 278.6–592.2，20pt，图片化字）</p>
+<table>
+<thead><tr><th style="width:17%">行</th><th style="width:11%">行高</th><th style="width:16%">行首单元格</th><th style="width:18%">列 A</th><th style="width:18%">列 B</th><th>列 C（我方）</th></tr></thead>
+<tbody>
+<tr><td>表头行 1（厂商）</td><td>29.2</td><td rowspan="2" style="background:#eef3ff">厂商及装备牌号<br><span class="small">x 13.5–212.4｜24pt</span></td><td>德国EOS<br><span class="small">x 212.4–327.7｜18pt</span></td><td>华曙高科<br><span class="small">x 327.7–439.4｜18pt</span></td><td><b>塑成非凡</b><br><span class="small">x 439.5–<b style="color:#b42318">713.0</b>｜18pt</span></td></tr>
+<tr><td>表头行 2（牌号）</td><td>29.4</td><td>P800<br><span class="small">16pt</span></td><td>UT252P<br><span class="small">16pt</span></td><td>LPBF-400<br><span class="small">16pt｜x 439.5–<b>605.8</b></span></td></tr>
+<tr><td>数据行 1</td><td>29.2</td><td>腔体最高温度（℃）</td><td class="num">385</td><td class="num">380</td><td class="num">400~420</td></tr>
+<tr><td>数据行 2</td><td>29.2</td><td>成形尺寸误差</td><td class="num">±1.5%~±3%</td><td class="num">±2%~±4%</td><td class="num">±1% 以内</td></tr>
+<tr><td>数据行 3</td><td>29.2</td><td>成形构件批次强度波动</td><td class="num">≥10MPa</td><td class="num">≥12MPa</td><td class="num">≤4.04MPa</td></tr>
+<tr><td>数据行 4</td><td>29.2</td><td>闭环控制机制</td><td class="num">开环人工调参</td><td class="num">静态八区开环</td><td class="num">RL毫秒级动态闭环</td></tr>
+</tbody>
+</table>
+
+<div class="card callout">
+<b>已确认的硬缺陷（坐标可复现）：表头行 1 的列 C 单元格宽 273.5pt（x 439.5–713.0），而列 C 的全部数据单元格宽 166.3pt（x 439.5–605.8）。</b>
+表头比表体右伸 107.7pt，两张表都是如此。该"多出来"的区域被一张竖图（x 601.0–717.4）占据——也就是说，<b>表格实际存在一个没有列名、没有数据、只有一张图的"影子第四列"</b>，表头被人为拉宽去盖住它。这不是设计，是补丁。
+</div>
+
+<h2>二、问题诊断</h2>
+
+<h3>2.1 A 类 · 结构与布局（致命/严重）</h3>
+<table>
+<thead><tr><th style="width:4%">#</th><th style="width:22%">问题</th><th style="width:30%">坐标证据 / 表现</th><th style="width:26%">后果</th><th style="width:8%">级别</th></tr></thead>
+<tbody>
+<tr><td>A1</td><td>表头与表体列宽不一致，出现"影子第四列"</td><td>表头行1 列C：x 439.5–713.0（273.5pt）；数据行 列C：x 439.5–605.8（166.3pt）。两表同病。</td><td>表格网格断裂；放大投影时一眼可见"最后一行多一块"；图片被误读为数据列。</td><td class="sev s0">致命</td></tr>
+<tr><td>A2</td><td>列宽严重失衡</td><td>表二：行首列 198.9 / A 115.3 / B 111.7 / C 166.3。我方列比竞品列宽 49%。</td><td>视觉上像"我方列被特意放大"，有刻意对比之嫌；竞品列 111.7pt 装不下「±1.5%~±3%」这类长串。</td><td class="sev s1">严重</td></tr>
+<tr><td>A3</td><td>两张表的列起点对不齐</td><td>表一行首列 13.5–210.6（197.1）；表二行首列 13.5–212.4（198.9）。A 列起点 210.6 vs 212.4。</td><td>上下两表的竖向网格线错开 1.8pt，远看是"两条不连续的竖线"。</td><td class="sev s2">一般</td></tr>
+<tr><td>A4</td><td>两表字号体系完全不统一</td><td>表一：厂商 16 / 牌号 12 / 指标 16 / 竞品值 14 / 我方值 16。表二：厂商 18 / 牌号 16 / 指标 16 / 全部值 16。</td><td>同一页两套排版语言；表一竞品数据被压到 12–14pt，我方 16pt，构成视觉偏袒。</td><td class="sev s1">严重</td></tr>
+<tr><td>A5</td><td>两表标题缩进不一致且不与表格左缘对齐</td><td>表一标题 x 起点 263.6；表二标题 x 起点 278.6；表格左缘 x=13.5。</td><td>标题像"浮在表上方中间"，与表格无视觉锚定关系。</td><td class="sev s2">一般</td></tr>
+<tr><td>A6</td><td>右侧两张 KPI 卡超出画布</td><td>KPI 卡外框 x 838.3–963.2、x 839.3–964.2，页面宽 960。</td><td>右侧约 4pt 被裁掉；不同投影/导出比例下可能出现白边或截断。</td><td class="sev s1">严重</td></tr>
+<tr><td>A7</td><td>右侧 6 张图全部无图签</td><td>图片位图 xref 8310/8313/8416/8414/8308/8311，覆盖 y 165.0–402.7。</td><td>图文一致性风险；评委无法判断是装备、构件、粉末还是检测报告。</td><td class="sev s0">致命</td></tr>
+<tr><td>A8</td><td>一行脚注覆盖两张证据强度完全不同的表</td><td>「比较口径与来源：国内外厂商公开资料及实测」，14pt，仅 1 行。</td><td>把"公开资料"和"我方实测"混为一谈，是最容易被抓住的可比性漏洞。</td><td class="sev s0">致命</td></tr>
+</tbody>
+</table>
+
+<h3>2.2 B 类 · 字段语义与归属（致命/严重）</h3>
+<table>
+<thead><tr><th style="width:4%">#</th><th style="width:20%">字段</th><th style="width:32%">问题</th><th style="width:30%">为什么是问题</th><th style="width:14%">级别</th></tr></thead>
+<tbody>
+<tr><td>B1</td><td>表一整表</td><td>按项目定位（PEEK 只是应用场景），材料对比表不应占据主页面上半屏，且视觉面积大于装备表。</td><td>P12 是"项目优势"的对标页，上半屏被材料表占领，直接推翻"全装备叙事"。评委的第一落眼点是表一。</td><td class="sev s0">致命</td></tr>
+<tr><td>B2</td><td>适用预热方式</td><td><b>归属错误</b>：预热方式是<b>装备</b>属性，不是材料属性，却放在材料对比表里。</td><td>威格斯 450FC30 是粉末牌号，粉末本身没有"单区整体预热"这一说；这是把机器特性安到粉末头上。</td><td class="sev s0">致命</td></tr>
+<tr><td>B3</td><td>适用预热方式</td><td><b>字段冗余</b>：与表二「闭环控制机制」「多区动态解耦」语义高度重叠。</td><td>同一能力在两页两表里说两遍，且措辞不同（动态解耦 / 动态闭环）。</td><td class="sev s1">严重</td></tr>
+<tr><td>B4</td><td>厂商及系统配置</td><td>命名不清：「系统配置」指什么系统？控温系统？整机？与表二「厂商及装备牌号」不是同一概念却并列呈现。</td><td>两表行首列名不一致（系统配置 vs 装备牌号），读者需自行推断它们其实是"行名/指标名列"。</td><td class="sev s1">严重</td></tr>
+<tr><td>B5</td><td>干摩擦系数</td><td>缺测试四要素：对偶材料、载荷、速度、温度；无执行标准。</td><td>术语守门规则 L2 机理量——不标四要素的摩擦系数在学术上无意义，专家一问即破。</td><td class="sev s0">致命</td></tr>
+<tr><td>B6</td><td>宽温域适应性</td><td>"稳定"未定义：是摩擦系数稳定？强度保持率？尺寸稳定？-150℃~150℃ 上限 150℃ 已越过 PEEK 的 Tg（约 143℃）。</td><td>150℃ 高于 Tg 时 PEEK 已软化，"稳定"若指承载/尺寸，需要极强证据；目前没有任何限定。</td><td class="sev s0">致命</td></tr>
+<tr><td>B7</td><td>成形构件批次强度波动</td><td><b>命名与主语失真</b>：参考答辩 P41/P45 的原始事实是「多次打印<b>拉伸试样</b>最高强度<b>最大差值</b>由 16.03MPa 降至 4.04MPa」，是试样级统计量；本表升格为"构件批次强度波动"。</td><td>把拉伸试样的批间极差，泛化为"成形构件批次强度波动"——术语跨层（L3 试样 → 构件）。评委会问"哪个构件？多少件？同一批次还是跨批次？"</td><td class="sev s0">致命</td></tr>
+<tr><td>B8</td><td>闭环控制机制</td><td>与 P4 直接冲突：P4 说 EOS「8 区单向温控」「在线激光功率反馈调节」；P12 说 EOS P800「开环人工调参」。</td><td>同一份材料里对同一竞品给出两种相反的技术判断，任何一处被追问都会崩。</td><td class="sev s0">致命</td></tr>
+</tbody>
+</table>
+
+<h3>2.3 C 类 · 数据类型与单位不匹配（致命/严重）</h3>
+<table>
+<thead><tr><th style="width:14%">行</th><th style="width:26%">三家取值</th><th style="width:16%">实际类型</th><th style="width:32%">冲突点</th><th style="width:12%">级别</th></tr></thead>
+<tbody>
+<tr><td>腔体最高温度</td><td>385 ｜ 380 ｜ <b>400~420</b></td><td>点值 / 点值 / <b>区间</b></td><td>点值与区间不可直接比较。420 上限在全文无任何出处（P6/P10 只说"突破400℃"）。若 420 非实测，属无源数字。</td><td class="sev s0">致命</td></tr>
+<tr><td>成形尺寸误差</td><td>±1.5%~±3% ｜ ±2%~±4% ｜ <b>±1% 以内</b></td><td>区间 / 区间 / <b>单侧上限</b></td><td>区间对上限，口径不等价。更关键：答辩 P42 实测表中三角晶格孔洞短边误差为 <b>-1.29%</b>，已超出 ±1%，"±1% 以内"与自身实测数据不符（原文表述为"基本位于 ±1% 附近"）。</td><td class="sev s0">致命</td></tr>
+<tr><td>成形构件批次强度波动</td><td><b>≥10MPa</b> ｜ <b>≥12MPa</b> ｜ <b>≤4.04MPa</b></td><td>下界 / 下界 / <b>上界</b></td><td>竞品给"至少这么差"，我方给"最多这么好"——两个不等号方向相反，本质是"用最利于自己的界"做对比，不是同口径。且 10/12 无出处。</td><td class="sev s0">致命</td></tr>
+<tr><td>宽温域适应性</td><td>仅室温稳定 ｜ 仅室温稳定 ｜ -150℃~150℃稳定</td><td>定性 / 定性 / <b>定量+定性</b></td><td>同行内混用定性与定量，无法构成表格比较；竞品的"仅室温"也无来源。</td><td class="sev s1">严重</td></tr>
+<tr><td>单位写法</td><td>≥10MPa ｜ ≤4.04MPa ｜ 400~420</td><td>单位内联在数值里</td><td>单位未独立成列，行名"（℃）"只在一行出现，其他行靠读值猜单位；长短不一时会被迫断行。</td><td class="sev s2">一般</td></tr>
+</tbody>
+</table>
+
+<h3>2.4 D 类 · 证据与数字溯源</h3>
+<table>
+<thead><tr><th style="width:22%">数字</th><th style="width:16%">来源状态</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>降低 57%（整体温度标准差）</td><td class="sev s3">可溯源</td><td>毕业答辩 P45：整体温度标准差降低 57.04%。✔</td></tr>
+<tr><td>降低 48%（全场最大温度偏差）</td><td class="sev s3">可溯源</td><td>毕业答辩 P37：最大偏差由 10.28℃ 降至 5.34℃（-48.05%）。✔</td></tr>
+<tr><td>升至 96%（温控达标率）</td><td class="sev s1">表述残缺</td><td>答辩 P36 原文为"达标率从 48% 提高至 96%"。卡片只写"升至96%"，丢失基线，说服力减半。</td></tr>
+<tr><td><b>提升 45%（智能调控效率）</b></td><td class="sev s0">无出处</td><td>答辩 49 页全文中<b>未检索到</b>该数字。相近的是 P28"仿真效率提高 4 倍"（≠智能调控效率）。<b>建议替换或删除。</b></td></tr>
+<tr><td>EOS ±1.5%~±3%、华曙 ±2%~±4%</td><td class="sev s0">无出处</td><td>两家的尺寸精度区间在 PDF 与答辩 PPT 中均未见来源，属于最危险的"编造式对标"。</td></tr>
+<tr><td>≥10MPa / ≥12MPa</td><td class="sev s0">无出处</td><td>同上。</td></tr>
+<tr><td>华曙 UT252P 380℃</td><td class="sev s1">存疑</td><td>P4 写"国产 340~380℃"，项目情报记录公开资料另有 340℃ 口径。需回原厂手册核定。</td></tr>
+<tr><td>400~420℃</td><td class="sev s1">上限无源</td><td>P6 仅"突破400℃"。420 未见任何依据。</td></tr>
+<tr><td>±1% 以内</td><td class="sev s0">与实测冲突</td><td>答辩 P42 实测含 -1.29%。</td></tr>
+</tbody>
+</table>
+
+<h3>2.5 E 类 · 与前后页的一致性</h3>
+<div class="card warn">
+<ul>
+<li><b>P4 ↔ P12 冲突</b>：P4「原位测温响应 · 国外：在线激光功率反馈调节」vs P12「EOS P800：开环人工调参」。必须二选一或加限定语。</li>
+<li><b>P6 ↔ P12 冲突</b>：P6「腔体温度突破 400℃」 vs P12「400~420℃」。建议统一为 400℃。</li>
+<li><b>P10 ↔ P12 重复</b>：P10 已有"整体温度标准差降低57%／区域温差降低63%／成品率 &lt;30%→&gt;85%／翘曲率 &lt;0.3%"，P12 右侧 KPI 卡又列一遍 57%、48%、96%，形成冗余；而 P10 的"成品率、翘曲率"反而没进对标表。</li>
+<li><b>P12 图片复用</b>：表一右侧竖图（xref 8094）与表二右侧竖图（xref 8303）同时出现在 P22，在 P22 上分别位于"材料""装备"图例正下方——说明这两张图确为材料图与装备图，<b>归属正确但缺图签</b>。</li>
+<li><b>工艺路线未声明</b>：EOS P800（激光烧结）、UT252P（SLS）、LPBF-400（LPBF）三条路线被放进同一张"同类型装备对比"表，却没有工艺路线这一行。这是整张表最大的可比性漏洞。</li>
+</ul>
+</div>
+
+<h2>三、字段调整建议（逐字段）</h2>
+<table>
+<thead><tr><th style="width:16%">现有字段</th><th style="width:6%">处置</th><th style="width:20%">建议字段</th><th style="width:12%">数据类型</th><th style="width:14%">单位/格式</th><th>口径与备注</th></tr></thead>
+<tbody>
+<tr><td>厂商及系统配置</td><td class="sev s1">改名</td><td>对比厂商</td><td>文本</td><td>—</td><td>两表统一命名；与表二"厂商及装备牌号"合并为同一种说法</td></tr>
+<tr><td>厂商及装备牌号</td><td class="sev s1">改名</td><td>对比厂商</td><td>文本</td><td>—</td><td>同上；牌号下沉到第二表头行</td></tr>
+<tr><td>（缺失）</td><td class="sev s0">新增</td><td><b>工艺路线</b></td><td>枚举文本</td><td>—</td><td>SLS / HT-SLS / LPBF。必须先声明路线，否则全表不可比</td></tr>
+<tr><td>（缺失）</td><td class="sev s0">新增</td><td><b>单位</b></td><td>文本</td><td>℃ / % / MPa</td><td>独立成列，避免单位内联造成断行与口径歧义</td></tr>
+<tr><td>（缺失）</td><td class="sev s0">新增</td><td><b>口径与来源</b></td><td>文本 + 角标</td><td>a/b/c</td><td>a=厂商公开资料（标年份）；b=第三方实测；c=自测（标样本数与标准）</td></tr>
+<tr><td>腔体最高温度（℃）</td><td class="sev s1">保留+收紧</td><td>腔体最高温度</td><td>整数</td><td>℃</td><td>三家统一为点值；我方取 400（删 420）；脚注说明"腔体能力 ≠ 粉床工作温度"</td></tr>
+<tr><td>成形尺寸误差</td><td class="sev s0">重写</td><td>成形尺寸误差</td><td>区间</td><td>%</td><td>三家统一用区间；我方按答辩 P42 写实：圆盘 +0.50%，晶格 -0.81%~-1.29%，合并表述为"±1.3% 以内"</td></tr>
+<tr><td>成形构件批次强度波动</td><td class="sev s0">重写</td><td><b>多次打印拉伸强度最大差值</b></td><td>数值 + n</td><td>MPa</td><td>回归答辩 P41/P45 原始口径；三家统一用"实测最大差值（n=__）"；竞品无源则填"待核"</td></tr>
+<tr><td>闭环控制机制</td><td class="sev s1">改写</td><td>闭环控制机制</td><td>枚举文本</td><td>—</td><td>无实时反馈 / 静态分区开环 / 多模态实时闭环；与 P4 对齐后再定 EOS 的档位</td></tr>
+<tr><td>（缺失，来自 P10）</td><td class="sev s2">建议新增</td><td>原位测温方式</td><td>枚举文本</td><td>—</td><td>无 / 单点 / 点面双模。能直接证明"测控端"差异，比温度值更有区分度</td></tr>
+<tr><td>（缺失，来自 P10）</td><td class="sev s2">建议新增</td><td>成形翘曲率</td><td>数值</td><td>%</td><td>P10 在版真值 &lt;0.3%，可进表</td></tr>
+<tr><td>干摩擦系数</td><td class="sev s0">移出主表</td><td>（降为应用场景小卡）</td><td>数值 + 条件</td><td>—</td><td>必须带对偶/载荷/速度/温度/标准，否则删除</td></tr>
+<tr><td>宽温域适应性</td><td class="sev s0">移出主表</td><td>（降为应用场景小卡）</td><td>文本</td><td>℃</td><td>需定义"稳定"的性能项；150℃ 需给出依据</td></tr>
+<tr><td>适用预热方式</td><td class="sev s0">删除</td><td>—</td><td>—</td><td>—</td><td>装备属性，已由"闭环控制机制/温区数"覆盖，属冗余字段</td></tr>
+</tbody>
+</table>
+
+<h2>四、结构调整方案</h2>
+
+<h3>4.1 总原则</h3>
+<div class="card good">
+<ol>
+<li><b>一页一主表</b>：P12 只保留<b>一张装备对标表</b>；材料对比整表移出（建议移到 P9 作为"应用场景"小卡，或放备查附录）。</li>
+<li><b>先声明可比性，再比数字</b>：新增「工艺路线」行与「口径与来源」列，把"公开资料"与"我方实测"彻底分开标注。</li>
+<li><b>绝对值进表，相对改善进卡</b>：主表只放可直接比较的绝对量；"降低57%、降低48%、升至96%"这类相对量放到右侧改善卡，并写出基线。</li>
+<li><b>数值口径三统一</b>：同行三家同为点值、或同为区间、或同为上下限，不允许混用；比较方向（越大越好/越小越好）在行名后标注箭头。</li>
+<li><b>PEEK 降级为场景条</b>：页面底部保留一条窄条，写明"当前已验证材料体系"，让材料回到它该在的位置。</li>
+</ol>
+</div>
+
+<h3>4.2 版面重构（建议坐标）</h3>
+<div class="two">
+<div class="box">
+<h4>现状（左区被两张表 + 两张图塞满）</h4>
+<pre>页眉 y0-58
+口号 y25-52
+表一（材料） y109.5-283.3  + 右侧竖图
+表二（装备） y330.1-505.5  + 右侧竖图
+脚注（1行）  y508-531
+──────────────────────
+右区：客户卡 + 6图(无签) + 4 KPI
+问题：表头越界、影子第四列、
+      字号两套、KPI 超出画布</pre>
+</div>
+<div class="box">
+<h4>建议（左区一张表 + 场景条）</h4>
+<pre>页眉 y0-58
+表标题        y 66 -  92
+表头行1/2     y 92 - 150
+数据行 ×8     y150 - 406   (每行 32)
+脚注 ×3       y410 - 452
+场景条(PEEK)  y460 - 505
+──────────────────────
+右区：客户卡 + 4图(带签) + 4 改善卡
+列宽：指标190 单位46 竞品A 96
+      竞品B 96 我方132 来源134
+      合计 694（x 13.5 - 707.5）</pre>
+</div>
+</div>
+
+<h3>4.3 右侧证据区重构</h3>
+<table>
+<thead><tr><th style="width:20%">元素</th><th style="width:32%">现状</th><th>建议</th></tr></thead>
+<tbody>
+<tr><td>上海149厂卡</td><td>3 行文字，无证据标识</td><td>保留；补"中试批次 / 时间 / 验收形式"，控制在 3 行以内</td></tr>
+<tr><td>图片组</td><td>6 张堆叠，无图签</td><td>精简为 <b>4 张 2×2</b>，每张配 12pt 图签：①整机 ②成形腔/传感 ③控温打印件 ④第三方检测/中试件</td></tr>
+<tr><td>KPI 卡 1</td><td>降低57% ｜ 整体温度标准差</td><td>改为「整体温度标准差 ↓57.04%」，副标"控温打印 vs 自由打印"</td></tr>
+<tr><td>KPI 卡 2</td><td>降低48% ｜ 全场最大温度偏差</td><td>改为「最大温度偏差 10.28→5.34℃」，比百分比更可核验</td></tr>
+<tr><td>KPI 卡 3</td><td>升至96% ｜ 温控达标</td><td>补基线：「温控达标率 48%→96%」，副标"训练步长 5000→10000"</td></tr>
+<tr><td>KPI 卡 4</td><td><b>提升45% ｜ 智能调控效率</b></td><td class="sev s0"><b>替换</b>：改为「批间强度差值 16.03→4.04 MPa」或「成形翘曲率 &lt;0.3%」——均有出处；45% 无源，不得使用</td></tr>
+</tbody>
+</table>
+
+<h2>五、最终理想表格样貌</h2>
+
+<h3>5.1 主表：自研高温 LPBF 装备与国内外同类装备对标</h3>
+<div class="card" style="padding:14px">
+<table style="font-size:12.5px">
+<thead>
+<tr>
+<th style="width:19%">指标</th>
+<th style="width:5%">单位</th>
+<th style="width:13%">德国 EOS<br><span class="small dim">P800</span></th>
+<th style="width:13%">华曙高科<br><span class="small dim">UT252P</span></th>
+<th style="width:19%;background:#002060;color:#fff">塑成非凡<br><span style="color:#f0c75e">LPBF-400</span></th>
+<th style="width:13%">口径与来源</th>
+</tr>
+<tr>
+<th style="background:#f4f7fc">工艺路线</th><th style="background:#f4f7fc">—</th>
+<td class="num">激光烧结<br><span class="small dim">HT-SLS 类</span></td>
+<td class="num">选择性激光烧结<br><span class="small dim">SLS</span></td>
+<td class="num" style="background:#eef3ff">激光粉末床熔融<br><span class="small dim">LPBF</span></td>
+<td class="small">a（厂商公开资料）</td>
+</tr>
+</thead>
+<tbody>
+<tr><td colspan="6" style="background:#eef3ff;font-weight:700;color:#002060">A · 装备能力</td></tr>
+<tr><td>腔体最高温度 <span class="small dim">↑</span></td><td class="num">℃</td><td class="num">385</td><td class="num">380</td><td class="num" style="background:#eef3ff"><b>400</b></td><td class="small">a / c　<span class="dim">腔体能力，非粉床工作温度</span></td></tr>
+<tr><td>温区数量</td><td class="num">区</td><td class="num">8</td><td class="num">8</td><td class="num" style="background:#eef3ff"><b>8</b></td><td class="small">a / c</td></tr>
+<tr><td colspan="6" style="background:#eef3ff;font-weight:700;color:#002060">B · 过程测控</td></tr>
+<tr><td>原位测温方式</td><td class="num">—</td><td class="num">激光功率反馈</td><td class="num">待核</td><td class="num" style="background:#eef3ff"><b>红外点+面 双模</b></td><td class="small">a / c</td></tr>
+<tr><td>闭环控制机制</td><td class="num">—</td><td class="num">分区控温<br><span class="small dim">（与 P4 对齐后定档）</span></td><td class="num">静态八区开环</td><td class="num" style="background:#eef3ff"><b>RL 毫秒级动态闭环</b></td><td class="small">a / c</td></tr>
+<tr><td>温控达标率 <span class="small dim">↑</span></td><td class="num">%</td><td class="num">待核</td><td class="num">待核</td><td class="num" style="background:#eef3ff"><b>96</b></td><td class="small">c　<span class="dim">答辩 P36，48%→96%</span></td></tr>
+<tr><td colspan="6" style="background:#eef3ff;font-weight:700;color:#002060">C · 成形构件实测（装备成绩单）</td></tr>
+<tr><td>成形尺寸误差 <span class="small dim">↓</span></td><td class="num">%</td><td class="num">待核</td><td class="num">待核</td><td class="num" style="background:#eef3ff"><b>±1.3 以内</b><br><span class="small dim">圆盘 +0.50 / 晶格 -0.81~-1.29</span></td><td class="small">c　<span class="dim">答辩 P42，n=5 特征尺寸</span></td></tr>
+<tr><td>多次打印拉伸强度最大差值 <span class="small dim">↓</span></td><td class="num">MPa</td><td class="num">待核</td><td class="num">待核</td><td class="num" style="background:#eef3ff"><b>4.04</b><br><span class="small dim">控温前 16.03</span></td><td class="small">c　<span class="dim">答辩 P41，12 wt.% MoS₂/PEEK</span></td></tr>
+<tr><td>成形翘曲率 <span class="small dim">↓</span></td><td class="num">%</td><td class="num">待核</td><td class="num">待核</td><td class="num" style="background:#eef3ff"><b>&lt; 0.3</b></td><td class="small">c</td></tr>
+</tbody>
+</table>
+<p class="small">
+<b>角标规则：</b>a = 厂商公开资料（标注年份与文件名）｜b = 第三方检测（标注机构与报告号）｜c = 团队自测（标注样本数 n 与执行标准）｜待核 = 未取得可引用来源，<b>禁止用估算值填充</b>。<br>
+<b>箭头规则：</b>↑ 越大越好，↓ 越小越好，避免"≥/≤"方向打架。
+</p>
+</div>
+
+<h3>5.2 页脚三条（替代原来的一行）</h3>
+<div class="card">
+<p class="small" style="margin:2px 0"><b>注 1｜口径</b>：竞品数据取自厂商公开资料（EOS P800 产品手册 2023；华曙 UT252P 官网参数），与自测数据非同次、同标准试验，仅作量级参照，不构成第三方认证结论。</p>
+<p class="small" style="margin:2px 0"><b>注 2｜自测</b>：腔体最高温度为装备能力上限；粉床工作预热温度为 320–335℃。尺寸误差按答辩成形件尺寸精度验证，覆盖圆盘、三角晶格、蜂窝晶格 5 个特征尺寸。</p>
+<p class="small" style="margin:2px 0"><b>注 3｜材料</b>：本表成形结果基于 12 wt.% MoS₂/PEEK 体系；PEEK 基自润滑复合材料为当前已验证应用场景之一，装备面向 PEEK 基及更高熔点聚合物体系。</p>
+</div>
+
+<h3>5.3 底部场景条（材料降级后的位置）</h3>
+<div class="card" style="border-left:5px solid #b8860b;background:#fffaf0">
+<table style="margin:0">
+<thead><tr><th style="width:22%">已验证材料体系</th><th style="width:26%">干摩擦系数</th><th style="width:26%">宽温域表现</th><th>测试条件</th></tr></thead>
+<tbody>
+<tr>
+<td>MoS₂/PEEK、h-BN/PEEK、CM-PEEK SL12</td>
+<td>0.05 ～ 0.11</td>
+<td>-150 ℃ ～ 150 ℃ 区间内摩擦系数稳定</td>
+<td>对偶 GCr15｜载荷 __ N｜线速度 __ m/s｜温度 __ ℃｜标准 GB/T 3960（<b>四要素必须补全，否则整行删除</b>）</td>
+</tr>
+</tbody>
+</table>
+<p class="small" style="margin:6px 0 0">此条只占一行高度，视觉权重低于主表，PEEK 由此回到"应用场景"的定位。</p>
+</div>
+
+<h2>六、落地检查清单</h2>
+<div class="card">
+<table>
+<thead><tr><th style="width:6%">序</th><th style="width:44%">动作</th><th style="width:16%">验收标准</th><th style="width:34%">备注</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>删除表一（材料对比表）；其内容降为底部场景条</td><td>P12 顶部第一眼只能看到装备表</td><td>材料表如需保留，移入备查附录</td></tr>
+<tr><td>2</td><td>修复表头/表体列宽错位，取消"影子第四列"</td><td>所有单元格 x 边界完全对齐，网格为严格矩形</td><td>右侧竖图移出表格，改为带图签的独立证据图</td></tr>
+<tr><td>3</td><td>列宽重排：指标 190 / 单位 46 / A 96 / B 96 / 我方 132 / 来源 134</td><td>竞品列与我方列宽度比 ≤ 1 : 1.4</td><td>消除"放大我方列"的观感</td></tr>
+<tr><td>4</td><td>新增「工艺路线」「单位」「口径与来源」三列/行</td><td>每行数字都能追到一个角标</td><td>可比性的核心修复</td></tr>
+<tr><td>5</td><td>统一数值口径：温度取点值 400；尺寸误差改 ±1.3% 以内；强度行改为"多次打印拉伸强度最大差值"</td><td>同行三家类型一致；与答辩 P36/P41/P42 逐条对得上</td><td>删除 420、删除 ≥10/≥12、删除 ±1% 以内</td></tr>
+<tr><td>6</td><td>删除「适用预热方式」行</td><td>材料属性与装备属性不混在同一表</td><td>其语义由"闭环控制机制/温区数"承接</td></tr>
+<tr><td>7</td><td>统一 P4 与 P12 对 EOS 的描述</td><td>两页对 EOS 的控温判断完全一致</td><td>建议 P4 改为"8 区分区控温（无粉床实时闭环）"</td></tr>
+<tr><td>8</td><td>KPI 卡 4 替换「智能调控效率提升45%」</td><td>页内不再出现任何无源数字</td><td>改用"批间强度差值 16.03→4.04 MPa"或"成形翘曲率 &lt;0.3%"</td></tr>
+<tr><td>9</td><td>右侧图片补图签，右侧 KPI 卡收进画布（右缘 ≤ 947）</td><td>每张图有 12pt 图签；无元素超出 x=960</td><td>图片由 6 张精简为 4 张</td></tr>
+<tr><td>10</td><td>口号「全面超越国内外公开同类产品」降级</td><td>改为"在可比指标上达到或优于公开口径"</td><td>"全面超越"属无边界最高级表述</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>七、一句话结论</h2>
+<div class="card callout">
+P12 的问题不在"数据不够漂亮"，而在<b>表格本身不成立</b>：表头与表体列宽错位、两表排版语言不同、同一行里点值与区间混用、竞品用下界我方用上界、竞品数字无来源、材料属性与装备属性同表、工艺路线不同却被当作同类对标。<br>
+<b>改法不是修数字，是重建表结构</b>：一页一表 → 先声明工艺路线与来源口径 → 只放同类型可比的绝对量 → 相对改善放进带基线的卡片 → PEEK 降为底部场景条。
+</div>
+
+<div class="footer">
+还原方法：PyMuPDF 提取矢量矩形（<code>page.get_drawings()</code>）、文本行坐标（<code>get_text("dict")</code>）、位图位置（<code>get_image_rects()</code>）与跨页图像复用（<code>get_images(full=True)</code>），页面坐标系 960 × 540 pt。<br>
+本轮仅做分析，未修改 <code>29 第四版.pdf</code>。未能从页面提取、需要人工核定的项已标注为「待核」，未作任何估算填充。生成日期：2026-08-29。
+</div>
+
+</main>
+</body>
+</html>
